@@ -1,0 +1,257 @@
+{
+  "name": "Notificação do GLPI pelo Talk (Modelo Público)",
+  "nodes": [
+    {
+      "parameters": {
+        "rule": {
+          "interval": [
+            {
+              "field": "weeks",
+              "triggerAtDay": [1, 3, 5, 4],
+              "triggerAtHour": 7,
+              "triggerAtMinute": 50
+            }
+          ]
+        }
+      },
+      "name": "Agendamento Diário",
+      "type": "n8n-nodes-base.scheduleTrigger",
+      "position": [-304, 32],
+      "id": "836a64e1-9a69-4779-8d84-3121fa5d2f03",
+      "typeVersion": 1.3
+    },
+    {
+      "parameters": {
+        "url": "http://seu-glpi.local/apirest.php/initSession",
+        "sendQuery": true,
+        "queryParameters": {
+          "parameters": [
+            {
+              "name": "user_token",
+              "value": "SEU_USER_TOKEN_AQUI"
+            }
+          ]
+        },
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "App-Token",
+              "value": "SEU_APP_TOKEN_AQUI"
+            }
+          ]
+        },
+        "options": {
+          "allowUnauthorizedCerts": true
+        }
+      },
+      "name": "1. Iniciar Sessão GLPI",
+      "type": "n8n-nodes-base.httpRequest",
+      "position": [-80, 32],
+      "id": "23776817-6b1d-4707-94d9-49f2421cf0ac",
+      "typeVersion": 4.4
+    },
+    {
+      "parameters": {
+        "url": "http://seu-glpi.local/apirest.php/search/Ticket",
+        "sendQuery": true,
+        "queryParameters": {
+          "parameters": [
+            { "name": "range", "value": "0-3000" },
+            { "name": "forcedisplay[0]", "value": "1" },
+            { "name": "forcedisplay[1]", "value": "12" },
+            { "name": "forcedisplay[2]", "value": "5" },
+            { "name": "sort[0]", "value": "2" },
+            { "name": "order[0]", "value": "DESC" },
+            { "name": "forcedisplay[3]", "value": "80" },
+            { "name": "forcedisplay[4]", "value": "15" },
+            { "name": "forcedisplay[5]", "value": "10" }
+          ]
+        },
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "Session-Token",
+              "value": "={{ $json.session_token }}"
+            },
+            {
+              "name": "App-Token",
+              "value": "SEU_APP_TOKEN_AQUI"
+            }
+          ]
+        },
+        "options": {
+          "allowUnauthorizedCerts": true
+        }
+      },
+      "name": "2. Buscar Chamados",
+      "type": "n8n-nodes-base.httpRequest",
+      "position": [144, 32],
+      "id": "0d2c4b5c-fd91-4dcd-b1ee-0630ca3b3e3b",
+      "typeVersion": 4.4
+    },
+    {
+      "parameters": {
+        "jsCode": "const chamadosPorTecnico = {};\nconst chamadosNaoAtribuidos = []; \n\nconst statusMap = {\n  1: \"Novo\",\n  2: \"Em Atendimento\",\n  3: \"Planejado\",\n  4: \"Pendente\"\n};\n\nconst urgenciaMap = {\n  1: \"⚪ Muito Baixa\",\n  2: \"🟢 Baixa\",\n  3: \"🟡 Média\",\n  4: \"🟠 Alta\",\n  5: \"🔴 Muito Alta\"\n};\n\n// Substitua pelo Token da conversa de cada técnico no Nextcloud Talk e o ID correspondente do GLPI\nconst mapaTecnicos = {\n  'ID_TEC_1': 'TOKEN_TALK_1', // tecnico_1\n  'ID_TEC_2': 'TOKEN_TALK_2', // tecnico_2\n  'ID_TEC_3': 'TOKEN_TALK_3', // tecnico_3\n};\n\nconst chamados = $input.first().json.data || [];\nconst hoje = new Date();\nconst diaDaSemana = hoje.getDay(); // 0 = Domingo, 1 = Segunda, 2 = Terça...\n\n// --- PROCESSAR CHAMADOS ---\nfor (const chamado of chamados) {\n  const id = chamado[\"2\"];\n  const titulo = chamado[\"1\"];\n  const empresa = chamado[\"80\"] || \"Empresa não informada\";\n  const status = chamado[\"12\"];\n  \n  if (status == 5 || status == 6) continue; \n  \n  const dataCriacao = chamado[\"15\"];\n  let diasAberto = 0;\n  if (dataCriacao) {\n    const dataChamado = new Date(dataCriacao);\n    const diferencaTempo = Math.abs(hoje - dataChamado);\n    diasAberto = Math.floor(diferencaTempo / (1000 * 60 * 60 * 24));\n  }\n  \n  const idUrgencia = chamado[\"10\"]; \n  const urgenciaTraduzida = urgenciaMap[idUrgencia] || \"Não informada\";\n  const statusTraduzido = statusMap[status] || status;\n\n  let tecnicosDoChamado = chamado[\"5\"];\n  if (!tecnicosDoChamado) {\n    tecnicosDoChamado = [];\n  } else if (!Array.isArray(tecnicosDoChamado)) {\n    tecnicosDoChamado = [tecnicosDoChamado];\n  }\n  \n  const objChamado = {\n    id: id,\n    titulo: titulo,\n    empresa: empresa,\n    status: statusTraduzido,\n    urgencia: urgenciaTraduzida,\n    diasAberto: diasAberto       \n  };\n\n  if (tecnicosDoChamado.length === 0) {\n    chamadosNaoAtribuidos.push(objChamado);\n  } else {\n    for (const idTec of tecnicosDoChamado) {\n      const idLimpo = String(idTec).trim();\n      const tokenTalk = mapaTecnicos[idLimpo];\n      \n      if (tokenTalk) {\n        if (!chamadosPorTecnico[tokenTalk]) {\n          chamadosPorTecnico[tokenTalk] = [];\n        }\n        chamadosPorTecnico[tokenTalk].push(objChamado);\n      }\n    }\n  }\n}\n\n// --- MONTAR AS MENSAGENS ---\nfunction formatarLista(lista) {\n  return lista.map(c => \n    `🎫 **[#${c.id}]** ${c.titulo}\\n` +\n    `🏢 **Cliente:** ${c.empresa}\\n` +\n    `🚥 **Status:** ${c.status}\\n` +\n    `🚨 **Urgência:** ${c.urgencia}\\n` +\n    `⏳ **Aberto há:** ${c.diasAberto} dia(s)\\n` +\n    `🔗 **Link:** http://seu-glpi.local/front/ticket.form.php?id=${c.id}`\n  ).join('\\n\\n---\\n\\n');\n}\n\nconst resultados = [];\n\n// 1. Criar mensagem para as Filas Individuais (BLOQUEADO NA QUINTA-FEIRA)\nif (diaDaSemana !== 4) {\n  for (const [token, lista] of Object.entries(chamadosPorTecnico)) {\n    if (lista.length > 0) {\n        const textoLista = formatarLista(lista);\n        \n        const msgTecnico = `Olá! 🚀\\n\\nVocê tem **${lista.length}** chamado(s) pendente(s) na sua fila. Confira o resumo:\\n\\n---\\n\\n${textoLista}\\n\\n---\\n\\nDê os devidos andamentos e atribua corretamente!\\n\\nBom trabalho e foco nas prioridades!`;\n        \n        resultados.push({ \n          json: { \n            mensagem_pronta: msgTecnico,\n            token_conversa: token \n          } \n        });\n    }\n  }\n}\n\n// 2. Criar a mensagem da Fila Geral COM PAGINAÇÃO (SOMENTE SEGUNDA-FEIRA e QUINTA-FEIRA)\nif (chamadosNaoAtribuidos.length > 0 && (diaDaSemana === 1 || diaDaSemana === 4)) {\n  \n  const tamanhoLote = 15;\n  const totalLotes = Math.ceil(chamadosNaoAtribuidos.length / tamanhoLote);\n  \n  // IDs dos responsáveis pela triagem\n  const idsResponsaveisTriagem = ['ID_TEC_1', 'ID_TEC_2']; \n\n  for (let i = 0; i < totalLotes; i++) {\n    const lote = chamadosNaoAtribuidos.slice(i * tamanhoLote, (i + 1) * tamanhoLote);\n    const textoNaoAtribuidos = formatarLista(lote);\n    \n    let msgFilaGeral = '';\n\n    if (i === 0) {\n      msgFilaGeral = `⚠️ **TRIAGEM PENDENTE (Parte ${i + 1}/${totalLotes}):**\\nOlá! No momento, temos **${chamadosNaoAtribuidos.length} chamado(s)** na fila geral aguardando atribuição. Por favor, verifiquem:\\n\\n---\\n\\n${textoNaoAtribuidos}\\n\\n---`;\n    } else {\n      msgFilaGeral = `⚠️ **TRIAGEM PENDENTE (Parte ${i + 1}/${totalLotes}):**\\nContinuação da lista da Fila Geral:\\n\\n---\\n\\n${textoNaoAtribuidos}\\n\\n---`;\n    }\n    \n    // Envia a mesma página da Fila Geral para todos os responsáveis da lista\n    for (const idResp of idsResponsaveisTriagem) {\n      const tokenResp = mapaTecnicos[idResp];\n      \n      if (tokenResp) {\n        resultados.push({ \n          json: { \n            mensagem_pronta: msgFilaGeral,\n            token_conversa: tokenResp \n          } \n        });\n      }\n    }\n  }\n}\n\nreturn resultados;"
+      },
+      "name": "4. Agrupar por Técnico",
+      "type": "n8n-nodes-base.code",
+      "position": [352, 32],
+      "id": "ae27db93-97cc-4b1c-b942-43e848f03016",
+      "typeVersion": 2,
+      "alwaysOutputData": false
+    },
+    {
+      "parameters": {
+        "url": "http://seu-glpi.local/apirest.php/killSession",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "Session-Token",
+              "value": "={{ $('1. Iniciar Sessão GLPI').first().json.session_token }}"
+            },
+            {
+              "name": "App-Token",
+              "value": "SEU_APP_TOKEN_AQUI"
+            }
+          ]
+        },
+        "options": {
+          "allowUnauthorizedCerts": true
+        }
+      },
+      "name": "5. Encerrar Sessão",
+      "type": "n8n-nodes-base.httpRequest",
+      "position": [800, -48],
+      "id": "13454104-97b1-4c5c-bdb3-c50dd558db69",
+      "typeVersion": 4.4,
+      "executeOnce": true
+    },
+    {
+      "parameters": {
+        "options": {}
+      },
+      "type": "n8n-nodes-base.splitInBatches",
+      "typeVersion": 3,
+      "position": [560, 32],
+      "id": "e87d7796-9a58-40db-9634-5b659ec585e6",
+      "name": "Loop Over Items"
+    },
+    {
+      "parameters": {
+        "amount": 30
+      },
+      "type": "n8n-nodes-base.wait",
+      "typeVersion": 1.1,
+      "position": [800, 112],
+      "id": "553f2e6c-8576-4102-bc03-995b14c0c665",
+      "name": "Wait",
+      "webhookId": "c51d14d9-ab23-44b5-88f3-d87141d9d2e6"
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "=https://seu-nextcloud.local/ocs/v2.php/apps/spreed/api/v1/chat/{{ $json.token_conversa }}",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            { "name": "Accept", "value": "application/json, text/plain, */*" },
+            {
+              "name": "Authorization",
+              "value": "Basic SEU_TOKEN_BASE64_AQUI"
+            },
+            { "name": "OCS-APIrequest", "value": "true" },
+            { "name": "Content-Type", "value": "application/json" }
+          ]
+        },
+        "sendBody": true,
+        "bodyParameters": {
+          "parameters": [
+            {
+              "name": "message",
+              "value": "={{ $json.mensagem_pronta }}"
+            }
+          ]
+        },
+        "options": {
+          "allowUnauthorizedCerts": true,
+          "redirect": { "redirect": {} },
+          "response": {
+            "response": {
+              "fullResponse": true,
+              "neverError": true,
+              "responseFormat": "json"
+            }
+          }
+        }
+      },
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.4,
+      "position": [992, 112],
+      "id": "902fdc2c-4c1a-476a-aee4-61264ed3b4e5",
+      "name": "Envio de mensagem pelo Talk",
+      "alwaysOutputData": true
+    }
+  ],
+  "pinData": {},
+  "connections": {
+    "Agendamento Diário": {
+      "main": [
+        [{ "node": "1. Iniciar Sessão GLPI", "type": "main", "index": 0 }]
+      ]
+    },
+    "1. Iniciar Sessão GLPI": {
+      "main": [
+        [{ "node": "2. Buscar Chamados", "type": "main", "index": 0 }]
+      ]
+    },
+    "2. Buscar Chamados": {
+      "main": [
+        [{ "node": "4. Agrupar por Técnico", "type": "main", "index": 0 }]
+      ]
+    },
+    "4. Agrupar por Técnico": {
+      "main": [
+        [{ "node": "Loop Over Items", "type": "main", "index": 0 }]
+      ]
+    },
+    "5. Encerrar Sessão": {
+      "main": [[]]
+    },
+    "Loop Over Items": {
+      "main": [
+        [{ "node": "5. Encerrar Sessão", "type": "main", "index": 0 }],
+        [{ "node": "Wait", "type": "main", "index": 0 }]
+      ]
+    },
+    "Wait": {
+      "main": [
+        [{ "node": "Envio de mensagem pelo Talk", "type": "main", "index": 0 }]
+      ]
+    },
+    "Envio de mensagem pelo Talk": {
+      "main": [
+        [{ "node": "Loop Over Items", "type": "main", "index": 0 }]
+      ]
+    }
+  },
+  "active": false,
+  "settings": {
+    "executionOrder": "v1",
+    "binaryMode": "separate",
+    "availableInMCP": false,
+    "timeSavedMode": "fixed",
+    "callerPolicy": "workflowsFromSameOwner"
+  },
+  "versionId": "5a86e530-79df-447f-ac3a-6c65d84147b4",
+  "meta": {
+    "templateCredsSetupCompleted": true
+  },
+  "tags": [
+    { "name": "Relatórios" },
+    { "name": "GLPI" },
+    { "name": "Produção" }
+  ]
+}
