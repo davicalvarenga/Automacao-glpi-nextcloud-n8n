@@ -1,11 +1,11 @@
-# 🚀 Integração GLPI & Nextcloud Talk via n8n
+# Integração GLPI & Nextcloud Talk via n8n
 
 Este repositório contém o fluxo (workflow) exportado do **n8n** projetado para melhorar o tempo de resposta e a gestão de SLA em operações de suporte de TI. Ele integra o **GLPI** (Sistema de Chamados) com o **Nextcloud Talk** (Comunicação), enviando resumos diários de forma proativa para os técnicos.
 
-## 🎯 O Desafio
+## O Desafio
 Em operações com alto volume de chamados, é comum que tickets percam o prazo de SLA devido à falta de visibilidade. Depender de buscas manuais em painéis desgasta a equipe. A ideia aqui é **inverter a lógica**: a prioridade vai até o técnico antes mesmo de ele abrir o painel.
 
-## ✨ Como Funciona (Features)
+## Como Funciona (Features)
 1. **Autenticação (HTTP Request):** Inicia uma sessão segura na API REST do GLPI.
 2. **Busca Ativa:** Consulta todos os chamados abertos/pendentes.
 3. **Triagem Avançada (Node.js):** - Traduz IDs do GLPI para dados legíveis (nível de urgência, status).
@@ -14,8 +14,8 @@ Em operações com alto volume de chamados, é comum que tickets percam o prazo 
 4. **Notificação (Nextcloud Talk):** Utiliza a API do Spreed/Talk para enviar os relatórios diários paginados e individuais em DMs ou grupos.
 5. **Segurança:** Encerra a sessão do GLPI (`Kill Session`) ao finalizar o fluxo.
 
-## 🤝 Agradecimentos
-Uma menção especial ao meu colega de equipe **[@NomeDoAmigo]** que foi fundamental na estruturação dos nós de **HTTP Request**, ajudando a configurar os métodos (GET/POST), injetar headers de autorização (`App-Token`, `Session-Token`) e tratar os payloads para a API do Nextcloud Talk!
+## Agradecimentos
+Uma menção especial ao meu colega de equipe **[@xandynho337]** que foi fundamental na estruturação dos nós de **HTTP Request**, ajudando a configurar os métodos (GET/POST), injetar headers de autorização (`App-Token`, `Session-Token`) e tratar os payloads para a API do Nextcloud Talk!
 
 ## 🛠️ Tecnologias Utilizadas
 - [n8n](https://n8n.io/)
@@ -23,7 +23,7 @@ Uma menção especial ao meu colega de equipe **[@NomeDoAmigo]** que foi fundame
 - Nextcloud Talk (Spreed API)
 - JavaScript (Node.js)
 
-## 📦 Como Importar e Usar
+## Como Importar e Usar
 
 1. Baixe o arquivo `Notificacao_GLPI_Talk.json` deste repositório.
 2. No seu n8n, vá em **Workflows**, clique na engrenagem no canto superior direito e selecione **Import from File...**
@@ -32,7 +32,7 @@ Uma menção especial ao meu colega de equipe **[@NomeDoAmigo]** que foi fundame
    - Nos nós de HTTP Request, adicione seu `App-Token`, `user_token` do GLPI e o token em Base64 do bot do Nextcloud.
    - No nó **"4. Agrupar por Técnico" (Code)**, edite o objeto `mapaTecnicos` com os IDs do seu GLPI e os Tokens de conversa correspondentes do Talk.
 
-## 📱 Exemplo de Notificação
+## Exemplo de Notificação
 
 O resultado entregue no chat do técnico ficará assim:
 
